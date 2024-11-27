@@ -1,0 +1,54 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# Dados de exemplo: pares de frases em inglês e português
+english_sentences = ["hello", "how are you", "good morning", "thank you", "good night"]
+portuguese_sentences = ["olá", "como você está", "bom dia", "obrigado", "boa noite"]
+
+# Tokenização dos dados
+def tokenize(sentences):
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts(sentences)
+    sequences = tokenizer.texts_to_sequences(sentences)
+    return tokenizer, sequences
+
+eng_tokenizer, eng_sequences = tokenize(english_sentences)
+por_tokenizer, por_sequences = tokenize(portuguese_sentences)
+
+# Tamanho do vocabulário
+en_vocab_size = len(eng_tokenizer.word_index) + 1
+pt_vocab_size = len(por_tokenizer.word_index) + 1
+
+# Padding das sequências
+max_len = max(max(len(seq) for seq in eng_sequences), max(len(seq) for seq in por_sequences))
+eng_padded = pad_sequences(eng_sequences, maxlen=max_len, padding='post')
+por_padded = pad_sequences(por_sequences, maxlen=max_len, padding='post')
+
+# Modelo de Tradução
+model = Sequential([
+    Embedding(input_dim=en_vocab_size, output_dim=64, input_length=max_len),
+    LSTM(64, return_sequences=False),
+    Dense(pt_vocab_size, activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Treinamento do modelo
+por_padded_targets = np.expand_dims(por_padded.argmax(axis=-1), axis=-1)  # Target para o modelo
+model.fit(eng_padded, por_padded_targets, epochs=100, verbose=1)
+
+# Tradução de novas frases
+def translate(sentence):
+    sequence = eng_tokenizer.texts_to_sequences([sentence])
+    padded = pad_sequences(sequence, maxlen=max_len, padding='post')
+    pred = model.predict(padded)
+    pred_word_indices = pred.argmax(axis=-1)
+    words = [por_tokenizer.index_word[i] for i in pred_word_indices if i in por_tokenizer.index_word]
+    return ' '.join(words)
+
+# Teste
+print(translate("hello"))
